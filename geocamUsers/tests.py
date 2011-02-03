@@ -7,9 +7,9 @@
 from django.test import TestCase
 
 
-class geocamUsersWebTest(TestCase):
+class geocamUsersTest(TestCase):
     """
     Tests for geocamUsersWeb
     """
-    def test_geocamUsersWeb(self):
+    def test_geocamUsers(self):
         pass
