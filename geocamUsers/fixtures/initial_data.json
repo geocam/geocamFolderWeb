@@ -1,0 +1,46 @@
+[
+    {
+        "model": "auth.Group",
+        "pk": 1,
+        "fields": {
+            "name": "anyuser"
+        }
+    },
+    {
+        "model": "auth.Group",
+        "pk": 2,
+        "fields": {
+            "name": "authuser"
+        }
+    },
+
+
+    {
+        "model": "geocamUsers.Folder",
+        "pk": 1,
+        "fields": {
+            "name": "",
+            "parent": null
+        }
+    },
+
+
+    {
+        "model": "geocamUsers.GroupPermission",
+        "pk": null,
+        "fields": {
+            "group": 1,
+            "action": 0,
+            "folder": 1
+        }
+    },
+    {
+        "model": "geocamUsers.GroupPermission",
+        "pk": null,
+        "fields": {
+            "group": 1,
+            "action": 1,
+            "folder": 1
+        }
+    }
+]

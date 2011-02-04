@@ -24,3 +24,18 @@ Other modules can access the value of FOO like this:
 Don't try to get the value of FOO from django.conf.settings.  That
 settings object will not know about the default value!
 """
+
+GEOCAM_USERS_ACTION_CHOICES = (
+    (0, 'view'), # view members
+    (1, 'list'), # list subfolders; if denied prevents all access to subfolders
+    (2, 'insert'), # insert members
+    (3, 'delete'), # delete members
+    (4, 'change'), # change existing members
+    (5, 'admin'), # change access control list
+
+    # can add more action choices in site-level settings if needed, but
+    # don't modify the preceding ones or the initial_data fixture will
+    # break.
+    )
+
+GEOCAM_USERS_PERMISSION_CACHE_TIMEOUT_SECONDS = 30
