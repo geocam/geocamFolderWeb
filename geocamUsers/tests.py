@@ -68,38 +68,38 @@ class FolderTest(TestCase):
 
     def test_addObject(self):
         # admin, alice and bob have write privileges
-        Member(name='byAdmin', folder=self.f1).save(requestingUser=self.admin)
+        Member(name='byAdmin', folder=self.f1).saveAssertAllowed(self.admin)
         self.assert_(Member.objects.filter(name='byAdmin', folder=self.f1).exists())
         
-        Member(name='byAlice', folder=self.f1).save(requestingUser=self.alice)
+        Member(name='byAlice', folder=self.f1).saveAssertAllowed(self.alice)
         self.assert_(Member.objects.filter(name='byAlice', folder=self.f1).exists())
 
-        Member(name='byBob', folder=self.f1).save(requestingUser=self.bob)
+        Member(name='byBob', folder=self.f1).saveAssertAllowed(self.bob)
         self.assert_(Member.objects.filter(name='byBob', folder=self.f1).exists())
 
         # clara only has read privileges, denied
         def byClara():
-            Member(name='byClara', folder=self.f1).save(requestingUser=self.clara)
+            Member(name='byClara', folder=self.f1).saveAssertAllowed(self.clara)
         self.assertRaises(PermissionDenied, byClara)
 
     def test_viewObject(self):
-        Member(name='x', folder=self.f1).saveNoCheck()
+        Member(name='x', folder=self.f1).save()
         def containsX(querySet):
             return querySet.filter(name='x', folder=self.f1).exists()
         
         # admin, alice, bob, and clara have read privileges
-        self.assert_(containsX(Member.allowedObjects(self.admin)))
-        self.assert_(containsX(Member.allowedObjects(self.alice)))
-        self.assert_(containsX(Member.allowedObjects(self.bob)))
-        self.assert_(containsX(Member.allowedObjects(self.clara)))
+        self.assert_(containsX(Member.allowed(self.admin)))
+        self.assert_(containsX(Member.allowed(self.alice)))
+        self.assert_(containsX(Member.allowed(self.bob)))
+        self.assert_(containsX(Member.allowed(self.clara)))
 
         # dave has no privileges, denied
-        self.assertFalse(containsX(Member.allowedObjects(self.dave)))
+        self.assertFalse(containsX(Member.allowed(self.dave)))
 
     def doTestFor(self, dirDict, requestingUser):
         # changing acl should work on 'all' but not on 'write'
         dirDict['all'].setPermissions(requestingUser, self.alice, Actions.READ)
-        self.assert_(dirDict['all'].isUserAllowed(self.alice, Action.VIEW))
+        self.assert_(dirDict['all'].isAllowed(self.alice, Action.VIEW))
 
         def changeAclWrite():
             self.anyuserDir['write'].setPermissions(requestingUser, self.alice, Actions.READ)

@@ -14,24 +14,30 @@ from geocamUtil.models.UuidField import UuidField
 from geocamUtil.models.ExtrasField import ExtrasField
 from geocamUsers import settings
 
+ACTION_CHOICES = (
+    'view', # view members
+    'list', # list subfolders; if denied prevents all access to subfolders
+    'add', # add members
+    'delete', # delete members
+    'change', # change existing members
+    'manage', # change access control list
+    )
+ACTION_LOOKUP = dict([name[0], name] for name in ACTION_CHOICES)
+
 class Action(object):
     pass
 
-class Actions(object):
-    pass
-
-# define constants drawn from settings.GEOCAM_USERS_ACTION_CHOICES
-# example: Actions.VIEW = 0 from the entry (0, 'view')
-for code, name in settings.GEOCAM_USERS_ACTION_CHOICES:
-    setattr(Action, name.upper(), code)
+# define constants drawn from ACTION_CHOICES
+# example: Actions.VIEW = 'v' from the entry 'view'
+for name in ACTION_CHOICES:
+    setattr(Action, name.upper(), name[0])
 
 # handy abbreviations for action combinations
-Actions.READ = (Action.VIEW, Action.LIST)
-Actions.WRITE = Actions.READ + (Action.INSERT, Action.DELETE, Action.CHANGE)
-Actions.ALL = Actions.WRITE + (Action.ADMIN,)
-Actions.NONE = ()
-
-ACTION_LOOKUP = dict(settings.GEOCAM_USERS_ACTION_CHOICES)
+class Actions(object):
+    READ = 'vl'
+    WRITE = 'vladc'
+    ALL = 'vladcm'
+    NONE = ''
 
 # special groups defined in fixtures/initial_data.json
 GROUP_ANYUSER_ID = 1
@@ -53,11 +59,9 @@ def getWithCache(resultFunc, args, timeout):
     return result
 
 def _addGroupAllowedFolders(allowed, groupId, action):
-    #print '_addGroupAllowedFolders: groupId=%s action=%s' % (groupId, ACTION_LOOKUP[action])
-    perms = GroupPermission.objects.filter(group__id=groupId, action=action).only('folder')
+    perms = GroupPermission.allowing(action).filter(group__id=groupId).only('folder')
     for p in perms:
         allowed[p.folder.id] = p.folder
-    #print '  _addGroupAllowedFolders: allowed=%s' % allowed.keys()
 
 def _getLocalAllowedFolders(user, action):
     """
@@ -66,7 +70,6 @@ def _getLocalAllowedFolders(user, action):
     through all its ancestors.  Folders are returned as a dict of
     folder.id -> folder object.
     """
-    #print '_getLocalAllowedFolders: user=%s action=%s' % (user, ACTION_LOOKUP[action])
     allowed = dict()
 
     _addGroupAllowedFolders(allowed, GROUP_ANYUSER_ID, action)
@@ -74,7 +77,7 @@ def _getLocalAllowedFolders(user, action):
     if user is not None and user.is_active:
         _addGroupAllowedFolders(allowed, GROUP_AUTHUSER_ID, action)
         
-        userPerms = UserPermission.objects.filter(user=user, action=action).only('folder')
+        userPerms = UserPermission.allowing(action).filter(user=user).only('folder')
         for p in userPerms:
             allowed[p.folder.id] = p.folder
 
@@ -82,7 +85,6 @@ def _getLocalAllowedFolders(user, action):
         for g in userGroups:
             _addGroupAllowedFolders(allowed, g.id, action)
 
-    #print '  _getLocalAllowedFolders: allowed=%s' % allowed.keys()
     return allowed
 
 def _getListableFoldersNoCache(user):
@@ -153,21 +155,17 @@ class Folder(models.Model):
         app_label = 'geocamUsers'
         unique_together = ('name', 'parent')
 
-    def isUserAllowed(self, user, action):
+    def isAllowed(self, user, action):
         return (((user is not None) and user.is_superuser)
                 or (self.id in getAllowedFolders(user, action)))
 
     def _getAclDict(self):
         aclDict = {}
         for perm in UserPermission.objects.filter(folder=self):
-            if perm.user.username not in aclDict:
-                aclDict[perm.user.username] = []
-            aclDict[perm.user.username].append(perm.action)
+            aclDict[perm.user.username] = perm.getActions()
         for perm in GroupPermission.objects.filter(folder=self):
             agentName = 'group:' + perm.group.name
-            if agentName not in aclDict:
-                aclDict[agentName] = []
-            aclDict[agentName].append(perm.action)
+            aclDict[agentName] = perm.getActions()
         return aclDict
 
     def getAclText(self):
@@ -176,8 +174,8 @@ class Folder(models.Model):
         for agentName, actions in acl:
             print '  %s %s' % (agentName, getActionListText(actions))
 
-    def assertUserAllowed(self, user, action):
-        if not self.isUserAllowed(user, action):
+    def assertAllowed(self, user, action):
+        if not self.isAllowed(user, action):
             if user is None:
                 userName = '<anonymous>'
             else:
@@ -185,32 +183,23 @@ class Folder(models.Model):
             raise PermissionDenied('user %s does not have %s permission for folder %s'
                                    % (userName, ACTION_LOOKUP[action], self.name))
 
-    def addPermissionNoCheck(self, agent, action):
-        if isinstance(agent, User):
-            UserPermission(user=agent, action=action, folder=self).save()
-        elif isinstance(agent, Group):
-            GroupPermission(group=agent, action=action, folder=self).save()
-        else:
-            raise TypeError('expected User or Group')
-
-    def removePermissionsNoCheck(self, agent):
-        if isinstance(agent, User):
-            UserPermission.objects.filter(user=agent, folder=self).delete()
-        elif isinstance(agent, Group):
-            GroupPermission.objects.filter(group=agent, folder=self).delete()
-        else:
-            raise TypeError('expected User or Group')
-
     def setPermissionsNoCheck(self, agent, actions):
         if isinstance(agent, str):
             agent = getAgentByName(agent)
 
-        self.removePermissionsNoCheck(agent)
-        for action in actions:
-            self.addPermissionNoCheck(agent, action)
+        if isinstance(agent, User):
+            perm, created = UserPermission.objects.get_or_create(user=agent, folder=self)
+            perm.setActions(actions)
+            perm.save()
+        elif isinstance(agent, Group):
+            perm, created = GroupPermission.objects.get_or_create(group=agent, folder=self)
+            perm.setActions(actions)
+            perm.save()
+        else:
+            raise TypeError('expected User, Group, or str')
 
     def setPermissions(self, requestingUser, agent, actions):
-        self.assertUserAllowed(requestingUser, Action.ADMIN)
+        self.assertAllowed(requestingUser, Action.MANAGE)
         self.setPermissionsNoCheck(agent, actions)
 
     def clearAclNoCheck(self):
@@ -220,14 +209,13 @@ class Folder(models.Model):
     def copyAclNoCheck(self, folder):
         self.clearAclNoCheck()
         for perm in UserPermission.objects.filter(folder=folder):
-            UserPermission(user=perm.user,
-                           action=perm.action,
-                           folder=self).save()
+            newPerm = UserPermission(user=perm.user, folder=self)
+            newPerm.setActions(perm.getActions())
+            newPerm.save()
         for perm in GroupPermission.objects.filter(folder=folder):
-            GroupPermission(group=perm.group,
-                            action=perm.action,
-                            folder=self).save()
-
+            newPerm = GroupPermission(group=perm.group, folder=self)
+            newPerm.setActions(perm.getActions())
+            newPerm.save()
 
     def mkdirNoCheck(self, name, admin=None):
         # note: db-level uniqueness check will fail if the subdir already exists
@@ -241,69 +229,122 @@ class Folder(models.Model):
         return subFolder
 
     def mkdir(self, requestingUser, name):
-        self.assertUserAllowed(requestingUser, Action.INSERT)
+        self.assertAllowed(requestingUser, Action.ADD)
         return self.mkdirNoCheck(name, admin=requestingUser)
 
     @staticmethod
     def getRootFolder():
         return Folder.objects.get(pk=1)
 
-class UserPermission(models.Model):
-    user = models.ForeignKey(User, db_index=True)
-    action = models.PositiveIntegerField(choices=settings.GEOCAM_USERS_ACTION_CHOICES, db_index=True)
+class AgentPermission(models.Model):
     folder = models.ForeignKey(Folder, db_index=True)
+    canView = models.BooleanField(db_index=True)
+    canList = models.BooleanField(db_index=True)
+    canAdd = models.BooleanField(db_index=True)
+    canDelete = models.BooleanField(db_index=True)
+    canChange = models.BooleanField(db_index=True)
+    canManage = models.BooleanField(db_index=True)
 
     class Meta:
-        app_label = 'geocamUsers'
-
-class GroupPermission(models.Model):
-    group = models.ForeignKey(Group, db_index=True)
-    action = models.PositiveIntegerField(choices=settings.GEOCAM_USERS_ACTION_CHOICES, db_index=True)
-    folder = models.ForeignKey(Folder, db_index=True)
-    
-    class Meta:
-        app_label = 'geocamUsers'
-
-class FolderMember(models.Model):
-    """
-    Mixin class for objects that are contained in a Folder and obey its
-    access controls.
-    """
-    folder = models.ForeignKey(Folder)
-    
-    class Meta:
-        app_label = 'geocamUsers'
         abstract = True
 
+    @staticmethod
+    def getActionField(action):
+        return 'can' + ACTION_LOOKUP[action].capitalize()
+
+    def allows(self, action):
+        return getattr(self, self.getActionField(action))
+
     @classmethod
-    def allowedObjects(cls, requestingUser, action=Action.VIEW):
+    def allowing(cls, action):
+        return cls.objects.filter(**{cls.getActionField(action): True})
+
+    def setActions(self, actions):
+        for action in Actions.ALL:
+            setattr(self, self.getActionField(action), action in actions)
+
+    def getActions(self):
+        text = []
+        for action in Actions.ALL:
+            if self.allows(action):
+                text.append(action)
+        return ''.join(text)
+
+class UserPermission(AgentPermission):
+    user = models.ForeignKey(User, db_index=True)
+
+class GroupPermission(AgentPermission):
+    group = models.ForeignKey(Group, db_index=True)
+
+class PermissionManager(object):
+    @staticmethod
+    def isAllowed(obj, user, action):
+        if isinstance(obj, Folder):
+            return obj.isAllowed(user, action)
+        elif hasattr(obj, 'folder'):
+            return obj.folder.isAllowed(user, action)
+        else:
+            raise TypeError('expected a Folder or a model with a folder field')
+
+    @staticmethod
+    def assertAllowed(obj, user, action):
+        if isinstance(obj, Folder):
+            obj.assertAllowed(user, action)
+        elif hasattr(obj, 'folder'):
+            obj.folder.assertAllowed(user, action)
+        else:
+            raise TypeError('expected a Folder or a model with a folder field')
+
+    @staticmethod
+    def filterAllowed(querySet, requestingUser, action=Action.VIEW):
         if (requestingUser is not None) and requestingUser.is_superuser:
-            return cls.objects
+            return querySet
         else:
             allowedFolderIds = getAllowedFolders(requestingUser, action).iterkeys()
-            return cls.objects.filter(folder__id__in=allowedFolderIds)
+            return querySet.filter(folder__id__in=allowedFolderIds)
 
-    def saveNoCheck(self, *args, **kwargs):
-        super(FolderMember, self).save(*args, **kwargs)
-
-    def save(self, *args, **kwargs):
-        requestingUser = kwargs.pop('requestingUser', None)
-        if self.pk is not None:
-            self.folder.assertUserAllowed(requestingUser, Action.CHANGE)
+    @classmethod
+    def saveAssertAllowed(cls, obj, requestingUser, *args, **kwargs):
+        if obj.pk is not None:
+            cls.assertAllowed(obj, requestingUser, Action.CHANGE)
         else:
-            self.folder.assertUserAllowed(requestingUser, Action.INSERT)
-        self.saveNoCheck(*args, **kwargs)
+            cls.assertAllowed(obj, requestingUser, Action.ADD)
+        obj.save(*args, **kwargs)
 
-    def deleteNoCheck(self, *args, **kwargs):
-        super(FolderMember, self).delete(*args, **kwargs)
+    @classmethod
+    def deleteAssertAllowed(cls, obj, requestingUser, *args, **kwargs):
+        cls.assertAllowed(obj, requestingUser, Action.DELETE)
+        obj.delete(*args, **kwargs)
 
-    def delete(self, *args, **kwargs):
-        requestingUser = kwargs.pop('requestingUser', None)
-        self.folder.assertUserAllowed(requestingUser, Action.DELETE)
-        self.deleteNoCheck(*args, **kwargs)
+class FolderMember(object):
+    """
+    This mixin class is intended for objects that are 'contained' in a
+    folder and subject to its access controls.
 
-class FolderMemberExample(FolderMember):
+    It imports functions from PermissionManager for convenience.  You
+    don't need to use this mixin if you prefer to call the
+    PermissionManager functions directly.
+    """
+
+    def isAllowed(self, user, action):
+        return self.folder.isAllowed(user, action)
+
+    def assertAllowed(self, user, action):
+        self.folder.assertAllowed(user, action)
+
+    @classmethod
+    def allowed(cls, requestingUser, action=Action.VIEW):
+        return PermissionManager.filterAllowed(cls.objects, requestingUser, action)
+
+    def saveAssertAllowed(self, requestingUser, *args, **kwargs):
+        PermissionManager.saveAssertAllowed(self, requestingUser, *args, **kwargs)
+
+    def deleteAssertAllowed(self, requestingUser, *args, **kwargs):
+        PermissionManager.deleteAssertAllowed(self, requestingUser, *args, **kwargs)
+
+class FolderMemberExample(models.Model, FolderMember):
     """
     This model exists only to support testing the FolderMember mixin.
     """
     name = models.CharField(max_length=32)
+    folder = models.ForeignKey(Folder, db_index=True)

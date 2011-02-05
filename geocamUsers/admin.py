@@ -5,3 +5,9 @@
 # __END_LICENSE__
 
 from django.contrib import admin
+
+from geocamUsers.models import Folder, UserPermission, GroupPermission
+
+admin.site.register(Folder)
+admin.site.register(UserPermission)
+admin.site.register(GroupPermission)

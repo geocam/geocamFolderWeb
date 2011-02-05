@@ -29,18 +29,10 @@
         "model": "geocamUsers.GroupPermission",
         "pk": null,
         "fields": {
-            "group": 1,
-            "action": 0,
-            "folder": 1
-        }
-    },
-    {
-        "model": "geocamUsers.GroupPermission",
-        "pk": null,
-        "fields": {
-            "group": 1,
-            "action": 1,
-            "folder": 1
+            "folder": 1,
+            "canView": true,
+            "canList": true,
+            "group": 1
         }
     }
 ]
