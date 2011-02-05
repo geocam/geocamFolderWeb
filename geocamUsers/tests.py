@@ -39,7 +39,9 @@ class FolderTest(TestCase):
         actions = getattr(Actions, actionsName.upper())
         prefix = re.sub('^\w+:', '', agent)
         folder = root.mkdirNoCheck('%s_%s' % (prefix, actionsName))
+        folder.clearAclNoCheck()
         folder.setPermissionsNoCheck(agent, actions)
+        Member(name='foo', folder=folder).save() # to test reading
         return folder
 
     def setUp(self):
@@ -102,8 +104,20 @@ class FolderTest(TestCase):
         self.assert_(dirDict['all'].isAllowed(self.alice, Action.VIEW))
 
         def changeAclWrite():
-            self.anyuserDir['write'].setPermissions(requestingUser, self.alice, Actions.READ)
+            dirDict['write'].setPermissions(requestingUser, self.alice, Actions.READ)
         self.assertRaises(PermissionDenied, changeAclWrite)
+
+        # adding an object should work on 'write' but not on 'read'
+        Member(name='writeGood', folder=dirDict['write']).saveAssertAllowed(requestingUser)
+        self.assert_(Member.objects.filter(name='writeGood', folder=dirDict['write']).exists())
+        
+        def addObjectRead():
+            Member(name='writeBad', folder=dirDict['read']).saveAssertAllowed(requestingUser)
+        self.assertRaises(PermissionDenied, addObjectRead)
+
+        # viewing an object should work on 'read' but not on 'none'
+        self.assert_(Member.allowed(requestingUser).filter(folder=dirDict['read']).exists())
+        self.assertFalse(Member.allowed(requestingUser).filter(folder=dirDict['none']).exists())
 
     def test_anyuser(self):
         self.doTestFor(self.anyuserDir, None)

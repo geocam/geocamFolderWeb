@@ -4,6 +4,8 @@
 # All Rights Reserved.
 # __END_LICENSE__
 
+from cStringIO import StringIO
+
 from django.db import models
 from django.contrib.auth.models import User, Group
 from django.core.cache import cache
@@ -139,11 +141,6 @@ def getAgentByName(agentString):
     else:
         return User.objects.get(username=agentString)
 
-def getActionListText(actions):
-    actions.sort()
-    return ''.join([ACTION_LOOKUP[action][0]
-                    for action in actions])
-
 class Folder(models.Model):
     name = models.CharField(max_length=32, db_index=True)
     parent = models.ForeignKey('self', null=True, db_index=True)
@@ -177,8 +174,10 @@ class Folder(models.Model):
     def getAclText(self):
         acl = self._getAclDict().items()
         acl.sort()
+        out = StringIO()
         for agentName, actions in acl:
-            print '  %s %s' % (agentName, getActionListText(actions))
+            print >>out, '  %s %s' % (agentName, actions)
+        return out.getvalue()
 
     def assertAllowed(self, user, action):
         if not self.isAllowed(user, action):
@@ -194,13 +193,19 @@ class Folder(models.Model):
             agent = getAgentByName(agent)
 
         if isinstance(agent, User):
-            perm, created = UserPermission.objects.get_or_create(user=agent, folder=self)
-            perm.setActions(actions)
-            perm.save()
+            if actions == '':
+                UserPermission.objects.filter(user=agent, folder=self).delete()
+            else:
+                perm, created = UserPermission.objects.get_or_create(user=agent, folder=self)
+                perm.setActions(actions)
+                perm.save()
         elif isinstance(agent, Group):
-            perm, created = GroupPermission.objects.get_or_create(group=agent, folder=self)
-            perm.setActions(actions)
-            perm.save()
+            if actions == '':
+                GroupPermission.objects.filter(group=agent, folder=self).delete()
+            else:
+                perm, created = GroupPermission.objects.get_or_create(group=agent, folder=self)
+                perm.setActions(actions)
+                perm.save()
         else:
             raise TypeError('expected User, Group, or str')
 
