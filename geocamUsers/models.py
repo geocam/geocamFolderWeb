@@ -155,6 +155,12 @@ class Folder(models.Model):
         app_label = 'geocamUsers'
         unique_together = ('name', 'parent')
 
+    def __unicode__(self):
+        result = self.name
+        if self.parent is not None:
+            result += ' parent=%s' % self.parent.name
+        return result
+
     def isAllowed(self, user, action):
         return (((user is not None) and user.is_superuser)
                 or (self.id in getAllowedFolders(user, action)))
@@ -273,8 +279,20 @@ class AgentPermission(models.Model):
 class UserPermission(AgentPermission):
     user = models.ForeignKey(User, db_index=True)
 
+    def __unicode__(self):
+        return ('folder %s allows user %s the actions: %s' %
+                (self.folder.name,
+                 self.user.username,
+                 self.getActions()))
+
 class GroupPermission(AgentPermission):
     group = models.ForeignKey(Group, db_index=True)
+
+    def __unicode__(self):
+        return ('folder %s allows group %s the actions: %s' %
+                (self.folder.name,
+                 self.group.name,
+                 self.getActions()))
 
 class PermissionManager(object):
     @staticmethod

@@ -19,7 +19,7 @@
         "model": "geocamUsers.Folder",
         "pk": 1,
         "fields": {
-            "name": "",
+            "name": "root",
             "parent": null
         }
     },
