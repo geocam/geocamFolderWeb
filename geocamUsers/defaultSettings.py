@@ -25,4 +25,12 @@ Don't try to get the value of FOO from django.conf.settings.  That
 settings object will not know about the default value!
 """
 
-GEOCAM_USERS_PERMISSION_CACHE_TIMEOUT_SECONDS = 30
+GEOCAM_USERS_ACCESS_CONTROL_ENABLED = True
+
+# the folder cache speeds things up, but you may want to disable it if
+# you have multiple independent cache instances (for example, with the
+# 'local memory' cache backend and multiple mod_wsgi daemons).
+# otherwise, changes will take a while to propagate and users might be
+# confused.
+GEOCAM_USERS_FOLDER_CACHE_ENABLED = True
+GEOCAM_USERS_FOLDER_CACHE_TIMEOUT_SECONDS = 30

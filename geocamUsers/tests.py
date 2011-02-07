@@ -38,7 +38,7 @@ class FolderTest(TestCase):
         root = Folder.getRootFolder()
         actions = getattr(Actions, actionsName.upper())
         prefix = re.sub('^\w+:', '', agent)
-        folder = root.mkdirNoCheck('%s_%s' % (prefix, actionsName))
+        folder = root.makeSubFolderNoCheck('%s_%s' % (prefix, actionsName))
         folder.clearAclNoCheck()
         folder.setPermissionsNoCheck(agent, actions)
         Member(name='foo', folder=folder).save() # to test reading
@@ -52,7 +52,7 @@ class FolderTest(TestCase):
         self.dave = User.objects.create_user('dave', 'dave@example.com')
 
         root = Folder.getRootFolder()
-        self.f1 = root.mkdirNoCheck('f1')
+        self.f1 = root.makeSubFolderNoCheck('f1')
         self.f1.setPermissionsNoCheck(self.alice, Actions.ALL)
         self.f1.setPermissionsNoCheck(self.bob, Actions.WRITE)
         self.f1.setPermissionsNoCheck(self.clara, Actions.READ)
@@ -82,6 +82,25 @@ class FolderTest(TestCase):
         # clara only has read privileges, denied
         def byClara():
             Member(name='byClara', folder=self.f1).saveAssertAllowed(self.clara)
+        self.assertRaises(PermissionDenied, byClara)
+
+    def test_mkdir(self):
+        # in these cases the getFolder() call should raise an exception if
+        # the mkdir did not create the dir successfully
+
+        # admin, alice, and bob have write privileges
+        Folder.mkdir(self.admin, '/f1/byAdmin')
+        Folder.getFolder(self.admin, '/f1/byAdmin')
+
+        Folder.mkdir(self.alice, '/f1/byAlice')
+        Folder.getFolder(self.alice, '/f1/byAlice')
+
+        Folder.mkdir(self.bob, '/f1/byBob')
+        Folder.getFolder(self.bob, '/f1/byBob')
+        
+        # clara has only read privileges, denied
+        def byClara():
+            Folder.mkdir(self.clara, '/f1/byClara')
         self.assertRaises(PermissionDenied, byClara)
 
     def test_viewObject(self):

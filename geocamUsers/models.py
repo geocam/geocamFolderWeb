@@ -4,12 +4,13 @@
 # All Rights Reserved.
 # __END_LICENSE__
 
+import os
 from cStringIO import StringIO
 
 from django.db import models
 from django.contrib.auth.models import User, Group
 from django.core.cache import cache
-from django.core.exceptions import PermissionDenied
+from django.core.exceptions import PermissionDenied, ObjectDoesNotExist
 from django.utils.http import urlquote
 
 from geocamUtil.models.UuidField import UuidField
@@ -18,7 +19,7 @@ from geocamUsers import settings
 
 ACTION_CHOICES = (
     'view', # view members
-    'list', # list subfolders; if denied prevents all access to subfolders
+    'list', # list subfolders
     'add', # add members
     'delete', # delete members
     'change', # change existing members
@@ -45,32 +46,38 @@ class Actions(object):
 GROUP_ANYUSER_ID = 1
 GROUP_AUTHUSER_ID = 2
 
+FOLDER_CACHE_VERSION = 1
+
 def getCacheKey(resultFunc, args):
-    prefix = '%s.%s.' % (resultFunc.__module__, resultFunc.__name__)
+    prefix = '%s.%s.%s.' % (FOLDER_CACHE_VERSION, resultFunc.__module__, resultFunc.__name__)
     return urlquote(prefix + '.'.join([repr(arg) for arg in args]))
 
 def getWithCache(resultFunc, args, timeout):
     """
     Memoizes call to resultFunc(*args) using the Django cache.
     """
-    cacheKey = getCacheKey(resultFunc, args)
-    result = cache.get(cacheKey)
-    if result is None:
-        result = resultFunc(*args)
-        cache.set(cacheKey, result, timeout)
-    return result
+    if settings.GEOCAM_USERS_FOLDER_CACHE_ENABLED:
+        cacheKey = getCacheKey(resultFunc, args)
+        result = cache.get(cacheKey)
+        if result is None:
+            result = resultFunc(*args)
+            cache.set(cacheKey, result, timeout)
+        return result
+    else:
+        return resultFunc(*args)
+
+def flushCache():
+    global FOLDER_CACHE_VERSION
+    FOLDER_CACHE_VERSION += 1
 
 def _addGroupAllowedFolders(allowed, groupId, action):
     perms = GroupPermission.allowing(action).filter(group__id=groupId).only('folder')
     for p in perms:
         allowed[p.folder.id] = p.folder
 
-def _getLocalAllowedFolders(user, action):
+def _getAllowedFoldersNoCache(user, action):
     """
-    Return folders for which @user has 'local' permission to perform
-    @action, that is, without considering whether the folder is listable
-    through all its ancestors.  Folders are returned as a dict of
-    folder.id -> folder object.
+    Non-memoized version of getAllowedFolders.
     """
     allowed = dict()
 
@@ -89,50 +96,54 @@ def _getLocalAllowedFolders(user, action):
 
     return allowed
 
-def _getListableFoldersNoCache(user):
-    """
-    Non-memoized version of _getListableFolders.
-    """
-    allowed = _getLocalAllowedFolders(user, Action.LIST)
-    while 1:
-        removeFolderIds = []
-        for folder in allowed.itervalues():
-            if folder.parent is not None and folder.parent not in allowed:
-                removeFolderIds.append(folder.id)
-        if removeFolderIds:
-            for id in removeFolderIds:
-                del allowed[id]
-        else:
-            break
-    return allowed
-
-def _getListableFolders(user):
-    """
-    Return folders for which @user has list access to both the folder
-    and all its ancestors.  Folders are returned as a dict of folder.id
-    -> folder object.
-    """
-    return getWithCache(_getListableFoldersNoCache, (user,),
-                        settings.GEOCAM_USERS_PERMISSION_CACHE_TIMEOUT_SECONDS)
-
-def _getAllowedFoldersNoCache(user, action):
-    """
-    Non-memoized version of getAllowedFolders.
-    """
-    localAllowed = _getLocalAllowedFolders(user, action)
-    listableFolders = _getListableFolders(user)
-    allowed = dict([(id, folder)
-                    for id, folder in localAllowed.iteritems()
-                    if folder.parent is None or folder.parent.id in listableFolders])
-    return allowed
-
 def getAllowedFolders(user, action):
     """
     Return folders for which @user has permission to perform @action.
     Folders are returned as a dict of folder.id -> folder object.
     """
     return getWithCache(_getAllowedFoldersNoCache, (user, action),
-                        settings.GEOCAM_USERS_PERMISSION_CACHE_TIMEOUT_SECONDS)
+                        settings.GEOCAM_USERS_FOLDER_CACHE_TIMEOUT_SECONDS)
+
+class FolderTree(object):
+    """
+    A data structure that caches relationships in the Folder table.  The
+    @root member of FolderTree is the root of a tree of folders; each
+    folder has is annotated with a member @subFolders, which is a list
+    of subfolders, and @path, which is the complete path to that folder.
+    The @byId member of FolderTree is a lookup table id -> folder.
+    """
+    def __init__(self, root, byId):
+        self.root = root
+        self.byId = byId
+
+def _getFolderTreeNoCache():
+    """
+    Non-memoized version of getFolderTree().
+    """
+    folders = Folder.objects.all().only('id', 'name', 'parent')
+    subFolderLookup = {}
+    for f in folders:
+        subFolderLookup[f.parent_id] = subFolderLookup.get(f.parent_id, []) + [f]
+    [root] = subFolderLookup[None]
+    tree = FolderTree(root, dict([(f.id, f) for f in folders]))
+    root.path = '/'
+    queue = [root]
+    while queue:
+        current = queue.pop()
+        current.subFolders = {}
+        for subFolder in subFolderLookup.get(current.id, []):
+            subFolder.path = current.path + '/' + subFolder.name
+            current.subFolders[subFolder.name] = subFolder
+            queue.append(subFolder)
+    return tree
+    
+def getFolderTree():
+    """
+    Returns a tree data structure for all folders in the system.  See
+    FolderTree class for details.
+    """
+    return getWithCache(_getFolderTreeNoCache, (),
+                        settings.GEOCAM_USERS_FOLDER_CACHE_TIMEOUT_SECONDS)
 
 def getAgentByName(agentString):
     if agentString.startswith('group:'):
@@ -158,9 +169,15 @@ class Folder(models.Model):
             result += ' parent=%s' % self.parent.name
         return result
 
+    def save(self, *args, **kwargs):
+        # folder change invalidates permission cache
+        flushCache()
+        super(Folder, self).save(*args, **kwargs)
+
     def isAllowed(self, user, action):
-        return (((user is not None) and user.is_superuser)
-                or (self.id in getAllowedFolders(user, action)))
+        return (not settings.GEOCAM_USERS_ACCESS_CONTROL_ENABLED
+                or (((user is not None) and user.is_superuser)
+                    or (self.id in getAllowedFolders(user, action))))
 
     def _getAclDict(self):
         aclDict = {}
@@ -228,7 +245,7 @@ class Folder(models.Model):
             newPerm.setActions(perm.getActions())
             newPerm.save()
 
-    def mkdirNoCheck(self, name, admin=None):
+    def makeSubFolderNoCheck(self, name, admin=None):
         # note: db-level uniqueness check will fail if the subdir already exists
         subFolder = Folder(name=name, parent=self)
         subFolder.save()
@@ -239,13 +256,69 @@ class Folder(models.Model):
         
         return subFolder
 
-    def mkdir(self, requestingUser, name):
+    def makeSubFolder(self, requestingUser, name):
         self.assertAllowed(requestingUser, Action.ADD)
-        return self.mkdirNoCheck(name, admin=requestingUser)
+        return self.makeSubFolderNoCheck(name, admin=requestingUser)
 
-    @staticmethod
-    def getRootFolder():
-        return Folder.objects.get(pk=1)
+    def removeSubFolderNoCheck(self, name):
+        Folder.objects.get(name=name, parent=self).delete()
+
+    def removeSubFolder(self, requestingUser, name):
+        self.assertAllowed(requestingUser, Action.DELETE)
+        return self.removeSubFolderNoCheck(name)
+
+    @classmethod
+    def getRootFolder(cls):
+        return cls.objects.get(pk=1)
+
+    @classmethod
+    def getFolderNoCheck(cls, path, workingFolder='/', requestingUser=None):
+        tree = getFolderTree()
+        absPath = os.path.normpath(os.path.join(workingFolder, path))
+        absPath = absPath[1:] # strip leading '/'
+        if absPath != '':
+            elts = absPath.split('/')
+        else:
+            elts = []
+        current = tree.root
+        for elt in elts:
+            if requestingUser and not current.isAllowed(requestingUser, Action.LIST):
+                raise PermissionDenied("while trying to access folder '%s' from working folder '%s': user %s is not allowed to list folder '%s'"
+                                       % (path, workingFolder, requestingUser.username, current.path))
+            try:
+                current = current.subFolders[elt]
+            except KeyError:
+                raise ObjectDoesNotExist("while trying to access folder '%s' from working folder '%s': folder '%s' does not exist"
+                                         % (path, workingFolder, os.path.normpath(os.path.join(current.path, elt))))
+        return current
+
+    @classmethod
+    def getFolder(cls, requestingUser, path, workingFolder='/'):
+        return cls.getFolderNoCheck(path, workingFolder, requestingUser=requestingUser)
+
+    @classmethod
+    def mkdirNoCheck(cls, path, workingFolder='/'):
+        dirname, basename = os.path.split(path)
+        parent = cls.getFolderNoCheck(dirname, workingFolder)
+        return parent.makeSubFolderNoCheck(basename)
+
+    @classmethod
+    def mkdir(cls, requestingUser, path, workingFolder='/'):
+        dirname, basename = os.path.split(path)
+        parent = cls.getFolder(requestingUser, dirname, workingFolder)
+        return parent.makeSubFolder(requestingUser, basename)
+
+    @classmethod
+    def rmdirNoCheck(cls, path, workingFolder='/'):
+        dirname, basename = os.path.split(path)
+        parent = cls.getFolderNoCheck(dirname, workingFolder)
+        return parent.removeSubFolderNoCheck(basename)
+
+    @classmethod
+    def rmdir(cls, requestingUser, path, workingFolder='/'):
+        dirname, basename = os.path.split(path)
+        parent = cls.getFolder(requestingUser, workingFolder)
+        return parent.removeSubFolder(requestingUser, basename)
 
 class AgentPermission(models.Model):
     folder = models.ForeignKey(Folder, db_index=True)
@@ -320,7 +393,8 @@ class PermissionManager(object):
 
     @staticmethod
     def filterAllowed(querySet, requestingUser, action=Action.VIEW):
-        if (requestingUser is not None) and requestingUser.is_superuser:
+        if (not settings.GEOCAM_USERS_ACCESS_CONTROL_ENABLED
+            or ((requestingUser is not None) and requestingUser.is_superuser)):
             return querySet
         else:
             allowedFolderIds = getAllowedFolders(requestingUser, action).iterkeys()
