@@ -19,7 +19,7 @@ class CacheTest(TestCase):
         def func(*args):
             return
 
-        self.assertEquals("geocamFolder.tests.func.1.%7B%7D.%27hello%27",
+        self.assertEquals("1.geocamFolder.tests.func.1.%7B%7D.%27hello%27",
                           getCacheKey(func, (1, {}, 'hello')))
 
     def test_getWithCache(self):

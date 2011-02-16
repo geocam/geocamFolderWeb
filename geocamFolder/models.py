@@ -56,7 +56,7 @@ def getWithCache(resultFunc, args, timeout):
     """
     Memoizes call to resultFunc(*args) using the Django cache.
     """
-    if settings.GEOCAM_USERS_FOLDER_CACHE_ENABLED:
+    if settings.GEOCAM_FOLDER_FOLDER_CACHE_ENABLED:
         cacheKey = getCacheKey(resultFunc, args)
         result = cache.get(cacheKey)
         if result is None:
@@ -102,7 +102,7 @@ def getAllowedFolders(user, action):
     Folders are returned as a dict of folder.id -> folder object.
     """
     return getWithCache(_getAllowedFoldersNoCache, (user, action),
-                        settings.GEOCAM_USERS_FOLDER_CACHE_TIMEOUT_SECONDS)
+                        settings.GEOCAM_FOLDER_FOLDER_CACHE_TIMEOUT_SECONDS)
 
 class FolderTree(object):
     """
@@ -143,7 +143,7 @@ def getFolderTree():
     FolderTree class for details.
     """
     return getWithCache(_getFolderTreeNoCache, (),
-                        settings.GEOCAM_USERS_FOLDER_CACHE_TIMEOUT_SECONDS)
+                        settings.GEOCAM_FOLDER_FOLDER_CACHE_TIMEOUT_SECONDS)
 
 def getAgentByName(agentString):
     if agentString.startswith('group:'):
@@ -175,7 +175,7 @@ class Folder(models.Model):
         super(Folder, self).save(*args, **kwargs)
 
     def isAllowed(self, user, action):
-        return (not settings.GEOCAM_USERS_ACCESS_CONTROL_ENABLED
+        return (not settings.GEOCAM_FOLDER_ACCESS_CONTROL_ENABLED
                 or (((user is not None) and user.is_superuser)
                     or (self.id in getAllowedFolders(user, action))))
 
@@ -393,7 +393,7 @@ class PermissionManager(object):
 
     @staticmethod
     def filterAllowed(querySet, requestingUser, action=Action.VIEW):
-        if (not settings.GEOCAM_USERS_ACCESS_CONTROL_ENABLED
+        if (not settings.GEOCAM_FOLDER_ACCESS_CONTROL_ENABLED
             or ((requestingUser is not None) and requestingUser.is_superuser)):
             return querySet
         else:
