@@ -14,17 +14,17 @@ PROJ_ROOT = os.path.abspath(os.path.dirname(__file__))
 sys.path.append(APP)
 
 ADMINS = (
-    # ('Your Name', 'your_email@domain.com'),
+    # ('Trey Smith', 'your_email@domain.com'),
 )
 
 MANAGERS = ADMINS
 
-DATABASE_ENGINE = 'sqlite3'           # 'postgresql_psycopg2', 'postgresql', 'mysql', 'sqlite3' or 'oracle'.
-DATABASE_NAME = 'dev.db'             # Or path to database file if using sqlite3.
-DATABASE_USER = ''             # Not used with sqlite3.
-DATABASE_PASSWORD = ''         # Not used with sqlite3.
-DATABASE_HOST = ''             # Set to empty string for localhost. Not used with sqlite3.
-DATABASE_PORT = ''             # Set to empty string for default. Not used with sqlite3.
+DATABASES = {
+    'default': {
+        'ENGINE': 'django.db.backends.sqlite3',
+        'NAME': 'dev.db'
+    }
+}
 
 # Local time zone for this installation. Choices can be found here:
 # http://en.wikipedia.org/wiki/List_of_tz_zones_by_name
@@ -45,20 +45,32 @@ USE_I18N = True
 
 # Absolute path to the directory that holds media.
 # Example: "/home/media/media.lawrence.com/"
-MEDIA_ROOT = os.path.abspath(os.path.join('media'))
+MEDIA_ROOT = os.path.join(APP, 'geocamFolder', 'media')
 
 # URL that handles the media served from MEDIA_ROOT. Make sure to use a
 # trailing slash if there is a path component (optional in other cases).
 # Examples: "http://media.lawrence.com", "http://example.com/media/"
 MEDIA_URL = '/static/'
 
+# Absolute path to the directory that holds data. This is different than media
+# in that it's uploaded/processed data that's not needed for the operation of
+# the site, but may need to be network-accessible, or be linked to from the
+# database. Examples: images, generate kml files, etc.
+# Example: "/data"
+# DATA_ROOT = os.path.join(PROJ_ROOT, 'data')
+
+# URL that handles the data served from DATA_ROOT. Make sure to use a
+# trailing slash if there is a path component (optional in other cases).
+# Examples: "http://data.lawrence.com", "http://example.com/data/"
+# DATA_URL = '/data/'
+
 # URL prefix for admin media -- CSS, JavaScript and images. Make sure to use a
 # trailing slash.
 # Examples: "http://foo.com/media/", "/media/".
-ADMIN_MEDIA_PREFIX = '/media/'
+ADMIN_MEDIA_PREFIX = '/static/admin/'
 
 # Make this unique, and don't share it with anybody.
-SECRET_KEY = 'g2_39yupn*6j4p*cg2%w643jiq-1n_annua*%i8+rq0dx9p=$n'
+SECRET_KEY = '@bzz_*7!9otu&h8%(157-2+7ad3zghi6ko*(m2!m5c_iowkaq7'
 
 # List of callables that know how to import templates from various sources.
 TEMPLATE_LOADERS = (
@@ -89,10 +101,3 @@ INSTALLED_APPS = (
     'django.contrib.sites',
     'geocamFolder',
 )
-
-CACHES = {
-    'default': {
-        'BACKEND': 'django.core.cache.backends.locmem.LocMemCache',
-        # 'LOCATION': 'unique-snowflake'
-    }
-}

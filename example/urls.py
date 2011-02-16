@@ -27,5 +27,7 @@ urlpatterns = patterns('',
 urlpatterns = urlpatterns + patterns('',
     (r'^static/(?P<path>.*)$', 'django.views.static.serve',
         {'document_root': settings.MEDIA_ROOT}),
-    ) if settings.DEBUG else urlpatterson
+#    (r'^data/(?P<path>.*)$', 'django.views.static.serve',
+#        {'document_root': settings.DATA_ROOT}),
+    )
 
