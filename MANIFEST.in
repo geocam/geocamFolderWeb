@@ -1,8 +1,8 @@
 recursive-include doc_src *
 recursive-include docs *
 
-recursive-include geocamUsers/media *
-recursive-include geocamUsers/templates *
+recursive-include geocamFolder/media *
+recursive-include geocamFolder/templates *
 
 include LICENSE
 include README.rst

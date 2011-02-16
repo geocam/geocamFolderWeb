@@ -5,7 +5,7 @@
 # __END_LICENSE__
 
 """
-geocamUsersWeb
+geocamFolderWeb
 """
 
 __version_info__ = {

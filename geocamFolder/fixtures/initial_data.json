@@ -16,7 +16,7 @@
 
 
     {
-        "model": "geocamUsers.Folder",
+        "model": "geocamFolder.Folder",
         "pk": 1,
         "fields": {
             "name": "root",
@@ -26,7 +26,7 @@
 
 
     {
-        "model": "geocamUsers.GroupPermission",
+        "model": "geocamFolder.GroupPermission",
         "pk": null,
         "fields": {
             "folder": 1,

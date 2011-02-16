@@ -15,7 +15,7 @@ from django.utils.http import urlquote
 
 from geocamUtil.models.UuidField import UuidField
 from geocamUtil.models.ExtrasField import ExtrasField
-from geocamUsers import settings
+from geocamFolder import settings
 
 ACTION_CHOICES = (
     'view', # view members
@@ -160,7 +160,7 @@ class Folder(models.Model):
     extras = ExtrasField()
 
     class Meta:
-        app_label = 'geocamUsers'
+        app_label = 'geocamFolder'
         unique_together = ('name', 'parent')
 
     def __unicode__(self):

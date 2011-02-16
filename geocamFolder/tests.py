@@ -11,15 +11,15 @@ from django.test import TestCase
 from django.contrib.auth.models import User
 from django.core.exceptions import PermissionDenied
 
-from geocamUsers.models import getCacheKey, getWithCache, Folder, Action, Actions
-from geocamUsers.models import FolderMemberExample as Member
+from geocamFolder.models import getCacheKey, getWithCache, Folder, Action, Actions
+from geocamFolder.models import FolderMemberExample as Member
 
 class CacheTest(TestCase):
     def test_getCacheKey(self):
         def func(*args):
             return
 
-        self.assertEquals("geocamUsers.tests.func.1.%7B%7D.%27hello%27",
+        self.assertEquals("geocamFolder.tests.func.1.%7B%7D.%27hello%27",
                           getCacheKey(func, (1, {}, 'hello')))
 
     def test_getWithCache(self):

@@ -17,11 +17,11 @@ def read_file(filename):
         return ''
 
 # Use the docstring of the __init__ file to be the description
-DESC = " ".join(__import__('geocamUsers').__doc__.splitlines()).strip()
+DESC = " ".join(__import__('geocamFolder').__doc__.splitlines()).strip()
 
 setup(
-    name = "geocamUsersWeb",
-    version = __import__('geocamUsers').get_version().replace(' ', '-'),
+    name = "geocamFolderWeb",
+    version = __import__('geocamFolder').get_version().replace(' ', '-'),
     url = '',
     author = 'Trey Smith',
     author_email = '',

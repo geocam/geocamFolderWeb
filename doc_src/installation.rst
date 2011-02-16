@@ -6,12 +6,12 @@ Installation is easy using ``pip`` or ``easy_install``.
 
 .. code-block:: bash
 
-	pip install geocamUsersWeb
+	pip install geocamFolderWeb
 
 or
 .. code-block:: bash
 
-	easy_install geocamUsersWeb
+	easy_install geocamFolderWeb
 
 Dependencies
 ************
