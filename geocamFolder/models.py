@@ -179,7 +179,7 @@ class Folder(models.Model):
                 or (((user is not None) and user.is_superuser)
                     or (self.id in getAllowedFolders(user, action))))
 
-    def _getAclDict(self):
+    def getAcl(self):
         aclDict = {}
         for perm in UserPermission.objects.filter(folder=self):
             aclDict[perm.user.username] = perm.getActions()
@@ -189,7 +189,7 @@ class Folder(models.Model):
         return aclDict
 
     def getAclText(self):
-        acl = self._getAclDict().items()
+        acl = self.getAcl().items()
         acl.sort()
         out = StringIO()
         for agentName, actions in acl:
@@ -317,7 +317,7 @@ class Folder(models.Model):
     @classmethod
     def rmdir(cls, requestingUser, path, workingFolder='/'):
         dirname, basename = os.path.split(path)
-        parent = cls.getFolder(requestingUser, workingFolder)
+        parent = cls.getFolder(requestingUser, dirname, workingFolder)
         return parent.removeSubFolder(requestingUser, basename)
 
 class AgentPermission(models.Model):
@@ -445,3 +445,16 @@ class FolderMemberExample(models.Model, FolderMember):
     """
     name = models.CharField(max_length=32)
     folder = models.ForeignKey(Folder, db_index=True)
+
+class FolderAwarePosition(models.Model, FolderMember):
+    """
+    This model appears as an example in the documentation.  We
+    instantiate it here to make it easier to verify the docs
+    are accurate.
+    """
+    x = models.FloatField()
+    y = models.FloatField()
+    folder = models.ForeignKey(Folder, db_index=True)
+
+    def __unicode__(self):
+        return 'x=%s y=%s' % (self.x, self.y)
