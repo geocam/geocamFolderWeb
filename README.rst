@@ -159,6 +159,7 @@ Here's an advanced example of granting and revoking ACL permissions::
   >>> alice = User.objects.create_user('alice', 'alice@example.com')
   >>> basinFireUsers = Group.objects.create(name='basinFireUsers')
   >>> alice.groups.add(basinFireUsers)
+  
   >>> from geocamFolder.models import Folder, Action, Actions
   >>> f = Folder.mkdirNoCheck('/basinFire')
   >>> f.getAcl() # initial ACL inherited from parent folder
@@ -169,11 +170,19 @@ Here's an advanced example of granting and revoking ACL permissions::
   >>> a = Folder.mkdir(alice, '/basinFire/alice')
   >>> a.getAcl() # initial ACL inherited + ALL access granted to requesting user
   {u'alice': 'vladcm', u'group:anyuser': 'vl'}
-  >>> f.setPermissionsNoCheck(alice, Actions.NONE) # revoke alice's access
+  
+  >>> f.setPermissionsNoCheck(alice, Actions.NONE) # revoke alice's write access
+  >>> f.getAcl()
+  {u'group:anyuser': 'vl'}
   >>> f.rmdir(alice, '/basinFire/alice') # this won't work
   PermissionDenied: user alice does not have delete permission for folder basinFire
+  >>> f.isAllowed(alice, Action.VIEW) # but alice can still view via group:anyuser
+  True
+  
   >>> f.setPermissionsNoCheck(basinFireUsers, Actions.WRITE)
-  >>> f.isAllowed(alice, Action.DELETE) # now alice gets permission by group
+  >>> f.getAcl()
+  {u'group:anyuser': 'vl', u'group:basinFireUsers': 'vladc'}
+  >>> f.isAllowed(alice, Action.DELETE) # now alice has delete permission via group:basinFireUsers
   True
 
 Note that many functions in the ``Folder`` class have a "standard" and
