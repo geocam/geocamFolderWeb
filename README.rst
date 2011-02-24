@@ -179,9 +179,9 @@ Here's an advanced example of granting and revoking ACL permissions::
   >>> f.isAllowed(alice, Action.VIEW) # but alice can still view via group:anyuser
   True
   
-  >>> f.setPermissionsNoCheck(basinFireUsers, Actions.WRITE)
+  >>> f.setPermissionsNoCheck(basinFireUsers, 'vld')
   >>> f.getAcl()
-  {u'group:anyuser': 'vl', u'group:basinFireUsers': 'vladc'}
+  {u'group:anyuser': 'vl', u'group:basinFireUsers': 'vld'}
   >>> f.isAllowed(alice, Action.DELETE) # now alice has delete permission via group:basinFireUsers
   True
 
