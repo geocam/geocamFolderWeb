@@ -11,18 +11,18 @@ relationship defines a familiar folder hierarchy::
 
   $ ./manage.py shell
   >>> from geocamFolder.models import Folder
-  >>> Folder.mkdirNoCheck('/foo') # saves a new Folder in the db
+  >>> Folder.mkdir('/foo') # saves a new Folder in the db
   <Folder: foo parent=root>
-  >>> Folder.mkdirNoCheck('/foo/bar')
+  >>> Folder.mkdir('/foo/bar')
   <Folder: bar parent=foo>
-  >>> Folder.getFolderNoCheck('/foo/bar') # fetches a Folder from the db
+  >>> Folder.getFolder('/foo/bar') # fetches a Folder from the db
   <Folder: bar parent=foo>
 
 Folders are intended to serve as containers for other database objects.
 They can provide a familiar hierarchical way for your users to organize
 their data.  To make one of your models aware of folders, give it a
-``ForeignKey(Folder)`` field and (optionally) make it inherit from the
-``FolderMember`` mixin::
+``ForeignKey(Folder)`` field named ``folder`` and (optionally) make it
+inherit from the ``FolderMember`` mixin::
 
   from django.db import models
   from geocamFolder.models import Folder, FolderMember
@@ -161,41 +161,40 @@ Here's an advanced example of granting and revoking ACL permissions::
   >>> alice.groups.add(basinFireUsers)
   
   >>> from geocamFolder.models import Folder, Action, Actions
-  >>> f = Folder.mkdirNoCheck('/basinFire')
+  >>> f = Folder.mkdir('/basinFire')
   >>> f.getAcl() # initial ACL inherited from parent folder
   {u'group:anyuser': 'vl'}
-  >>> f.setPermissionsNoCheck(alice, Actions.WRITE)
+  >>> f.setPermissions(alice, Actions.WRITE)
   >>> f.getAcl()
   {u'alice': 'vladc', u'group:anyuser': 'vl'}
-  >>> a = Folder.mkdir(alice, '/basinFire/alice')
+  >>> a = Folder.mkdirAssertAllowed(alice, '/basinFire/alice')
   >>> a.getAcl() # initial ACL inherited + ALL access granted to requesting user
   {u'alice': 'vladcm', u'group:anyuser': 'vl'}
   
-  >>> f.setPermissionsNoCheck(alice, Actions.NONE) # revoke alice's write access
+  >>> f.setPermissions(alice, Actions.NONE) # revoke alice's write access
   >>> f.getAcl()
   {u'group:anyuser': 'vl'}
-  >>> f.rmdir(alice, '/basinFire/alice') # this won't work
+  >>> f.rmdirAssertAllowed(alice, '/basinFire/alice') # this won't work
   PermissionDenied: user alice does not have delete permission for folder basinFire
   >>> f.isAllowed(alice, Action.VIEW) # but alice can still view via group:anyuser
   True
   
-  >>> f.setPermissionsNoCheck(basinFireUsers, 'vld')
+  >>> f.setPermissions(basinFireUsers, 'vld')
   >>> f.getAcl()
   {u'group:anyuser': 'vl', u'group:basinFireUsers': 'vld'}
   >>> f.isAllowed(alice, Action.DELETE) # now alice has delete permission via group:basinFireUsers
   True
 
-Note that many functions in the ``Folder`` class have a "standard" and
-"no-check" version.  The standard version takes the requesting user as
-its first argument and checks that the user has permission to perform
-the action (raising ``PermissionDenied`` if not).  The no-check version
-leaves out the requesting user argument and does not check permissions.
+Note that many functions in the ``Folder`` class have a "basic" and
+"assert-allowed" version.  The assert-allowed version takes the
+requesting user as its first argument and checks that the user has
+permission to perform the action (raising ``PermissionDenied`` if not).
 
 To enforce proper access control, code that runs within a Django view
 and performs actions on behalf of a user should typically use the
-standard version of the function with ``request.user`` as the first
-argument.  Administrative scripts might use the no-check version.  But
-this is only a convention and usage is entirely up to you.
+assert-allowed version of the function with ``request.user`` as the
+first argument.  Administrative scripts might use the basic version.
+But this is only a convention and usage is entirely up to you.
 
 Objects Contained in Folders
 ~~~~~~~~~~~~~~~~~~~~~~~~~~~~

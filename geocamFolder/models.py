@@ -205,7 +205,7 @@ class Folder(models.Model):
             raise PermissionDenied('user %s does not have %s permission for folder %s'
                                    % (userName, ACTION_LOOKUP[action], self.name))
 
-    def setPermissionsNoCheck(self, agent, actions):
+    def setPermissions(self, agent, actions):
         if isinstance(agent, str):
             agent = getAgentByName(agent)
 
@@ -226,16 +226,16 @@ class Folder(models.Model):
         else:
             raise TypeError('expected User, Group, or str')
 
-    def setPermissions(self, requestingUser, agent, actions):
+    def setPermissionsAssertAllowed(self, requestingUser, agent, actions):
         self.assertAllowed(requestingUser, Action.MANAGE)
-        self.setPermissionsNoCheck(agent, actions)
+        self.setPermissions(agent, actions)
 
-    def clearAclNoCheck(self):
+    def clearAcl(self):
         UserPermission.objects.filter(folder=self).delete()
         GroupPermission.objects.filter(folder=self).delete()
 
-    def copyAclNoCheck(self, folder):
-        self.clearAclNoCheck()
+    def copyAcl(self, folder):
+        self.clearAcl()
         for perm in UserPermission.objects.filter(folder=folder):
             newPerm = UserPermission(user=perm.user, folder=self)
             newPerm.setActions(perm.getActions())
@@ -245,34 +245,34 @@ class Folder(models.Model):
             newPerm.setActions(perm.getActions())
             newPerm.save()
 
-    def makeSubFolderNoCheck(self, name, admin=None):
+    def makeSubFolder(self, name, admin=None):
         # note: db-level uniqueness check will fail if the subdir already exists
         subFolder = Folder(name=name, parent=self)
         subFolder.save()
 
-        subFolder.copyAclNoCheck(self)
+        subFolder.copyAcl(self)
         if admin:
-            subFolder.setPermissionsNoCheck(admin, Actions.ALL)
+            subFolder.setPermissions(admin, Actions.ALL)
         
         return subFolder
 
-    def makeSubFolder(self, requestingUser, name):
+    def makeSubFolderAssertAllowed(self, requestingUser, name):
         self.assertAllowed(requestingUser, Action.ADD)
-        return self.makeSubFolderNoCheck(name, admin=requestingUser)
+        return self.makeSubFolder(name, admin=requestingUser)
 
-    def removeSubFolderNoCheck(self, name):
+    def removeSubFolder(self, name):
         Folder.objects.get(name=name, parent=self).delete()
 
-    def removeSubFolder(self, requestingUser, name):
+    def removeSubFolderAssertAllowed(self, requestingUser, name):
         self.assertAllowed(requestingUser, Action.DELETE)
-        return self.removeSubFolderNoCheck(name)
+        return self.removeSubFolder(name)
 
     @classmethod
     def getRootFolder(cls):
         return cls.objects.get(pk=1)
 
     @classmethod
-    def getFolderNoCheck(cls, path, workingFolder='/', requestingUser=None):
+    def getFolder(cls, path, workingFolder='/', requestingUser=None):
         tree = getFolderTree()
         absPath = os.path.normpath(os.path.join(workingFolder, path))
         absPath = absPath[1:] # strip leading '/'
@@ -293,32 +293,32 @@ class Folder(models.Model):
         return current
 
     @classmethod
-    def getFolder(cls, requestingUser, path, workingFolder='/'):
-        return cls.getFolderNoCheck(path, workingFolder, requestingUser=requestingUser)
+    def getFolderAssertAllowed(cls, requestingUser, path, workingFolder='/'):
+        return cls.getFolder(path, workingFolder, requestingUser=requestingUser)
 
     @classmethod
-    def mkdirNoCheck(cls, path, workingFolder='/'):
+    def mkdir(cls, path, workingFolder='/'):
         dirname, basename = os.path.split(path)
-        parent = cls.getFolderNoCheck(dirname, workingFolder)
-        return parent.makeSubFolderNoCheck(basename)
+        parent = cls.getFolder(dirname, workingFolder)
+        return parent.makeSubFolder(basename)
 
     @classmethod
-    def mkdir(cls, requestingUser, path, workingFolder='/'):
+    def mkdirAssertAllowed(cls, requestingUser, path, workingFolder='/'):
         dirname, basename = os.path.split(path)
-        parent = cls.getFolder(requestingUser, dirname, workingFolder)
-        return parent.makeSubFolder(requestingUser, basename)
+        parent = cls.getFolderAssertAllowed(requestingUser, dirname, workingFolder)
+        return parent.makeSubFolderAssertAllowed(requestingUser, basename)
 
     @classmethod
-    def rmdirNoCheck(cls, path, workingFolder='/'):
+    def rmdir(cls, path, workingFolder='/'):
         dirname, basename = os.path.split(path)
-        parent = cls.getFolderNoCheck(dirname, workingFolder)
-        return parent.removeSubFolderNoCheck(basename)
+        parent = cls.getFolder(dirname, workingFolder)
+        return parent.removeSubFolder(basename)
 
     @classmethod
-    def rmdir(cls, requestingUser, path, workingFolder='/'):
+    def rmdirAssertAllowed(cls, requestingUser, path, workingFolder='/'):
         dirname, basename = os.path.split(path)
-        parent = cls.getFolder(requestingUser, dirname, workingFolder)
-        return parent.removeSubFolder(requestingUser, basename)
+        parent = cls.getFolderAssertAllowed(requestingUser, dirname, workingFolder)
+        return parent.removeSubFolderAssertAllowed(requestingUser, basename)
 
 class AgentPermission(models.Model):
     folder = models.ForeignKey(Folder, db_index=True)

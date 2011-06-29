@@ -38,9 +38,9 @@ class FolderTest(TestCase):
         root = Folder.getRootFolder()
         actions = getattr(Actions, actionsName.upper())
         prefix = re.sub('^\w+:', '', agent)
-        folder = root.makeSubFolderNoCheck('%s_%s' % (prefix, actionsName))
-        folder.clearAclNoCheck()
-        folder.setPermissionsNoCheck(agent, actions)
+        folder = root.makeSubFolder('%s_%s' % (prefix, actionsName))
+        folder.clearAcl()
+        folder.setPermissions(agent, actions)
         Member(name='foo', folder=folder).save() # to test reading
         return folder
 
@@ -52,11 +52,11 @@ class FolderTest(TestCase):
         self.dave = User.objects.create_user('dave', 'dave@example.com')
 
         root = Folder.getRootFolder()
-        self.f1 = root.makeSubFolderNoCheck('f1')
-        self.f1.setPermissionsNoCheck(self.alice, Actions.ALL)
-        self.f1.setPermissionsNoCheck(self.bob, Actions.WRITE)
-        self.f1.setPermissionsNoCheck(self.clara, Actions.READ)
-        self.f1.setPermissionsNoCheck('group:anyuser', Actions.NONE)
+        self.f1 = root.makeSubFolder('f1')
+        self.f1.setPermissions(self.alice, Actions.ALL)
+        self.f1.setPermissions(self.bob, Actions.WRITE)
+        self.f1.setPermissions(self.clara, Actions.READ)
+        self.f1.setPermissions('group:anyuser', Actions.NONE)
 
         levels = ('all', 'write', 'read', 'none')
 
@@ -89,18 +89,18 @@ class FolderTest(TestCase):
         # the mkdir did not create the dir successfully
 
         # admin, alice, and bob have write privileges
-        Folder.mkdir(self.admin, '/f1/byAdmin')
-        Folder.getFolder(self.admin, '/f1/byAdmin')
+        Folder.mkdirAssertAllowed(self.admin, '/f1/byAdmin')
+        Folder.getFolderAssertAllowed(self.admin, '/f1/byAdmin')
 
-        Folder.mkdir(self.alice, '/f1/byAlice')
-        Folder.getFolder(self.alice, '/f1/byAlice')
+        Folder.mkdirAssertAllowed(self.alice, '/f1/byAlice')
+        Folder.getFolderAssertAllowed(self.alice, '/f1/byAlice')
 
-        Folder.mkdir(self.bob, '/f1/byBob')
-        Folder.getFolder(self.bob, '/f1/byBob')
+        Folder.mkdirAssertAllowed(self.bob, '/f1/byBob')
+        Folder.getFolderAssertAllowed(self.bob, '/f1/byBob')
         
         # clara has only read privileges, denied
         def byClara():
-            Folder.mkdir(self.clara, '/f1/byClara')
+            Folder.mkdirAssertAllowed(self.clara, '/f1/byClara')
         self.assertRaises(PermissionDenied, byClara)
 
     def test_viewObject(self):
@@ -119,11 +119,11 @@ class FolderTest(TestCase):
 
     def doTestFor(self, dirDict, requestingUser):
         # changing acl should work on 'all' but not on 'write'
-        dirDict['all'].setPermissions(requestingUser, self.alice, Actions.READ)
+        dirDict['all'].setPermissionsAssertAllowed(requestingUser, self.alice, Actions.READ)
         self.assert_(dirDict['all'].isAllowed(self.alice, Action.VIEW))
 
         def changeAclWrite():
-            dirDict['write'].setPermissions(requestingUser, self.alice, Actions.READ)
+            dirDict['write'].setPermissionsAssertAllowed(requestingUser, self.alice, Actions.READ)
         self.assertRaises(PermissionDenied, changeAclWrite)
 
         # adding an object should work on 'write' but not on 'read'
