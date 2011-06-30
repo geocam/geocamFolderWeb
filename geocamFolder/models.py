@@ -5,6 +5,7 @@
 # __END_LICENSE__
 
 import os
+import operator
 from cStringIO import StringIO
 
 from django.db import models
@@ -18,12 +19,12 @@ from geocamUtil.models.ExtrasField import ExtrasField
 from geocamFolder import settings
 
 ACTION_CHOICES = (
-    'view', # view members
+    'read', # read members
     'list', # list subfolders
-    'add', # add members
+    'insert', # insert members
     'delete', # delete members
     'change', # change existing members
-    'manage', # change access control list
+    'admin', # change access control list
     )
 ACTION_LOOKUP = dict([name[0], name] for name in ACTION_CHOICES)
 
@@ -31,15 +32,15 @@ class Action(object):
     pass
 
 # define constants drawn from ACTION_CHOICES
-# example: Actions.VIEW = 'v' from the entry 'view'
+# example: Actions.READ = 'r' from the entry 'read'
 for name in ACTION_CHOICES:
     setattr(Action, name.upper(), name[0])
 
 # handy abbreviations for action combinations
 class Actions(object):
-    READ = 'vl'
-    WRITE = 'vladc'
-    ALL = 'vladcm'
+    READ = 'rl'
+    WRITE = 'rlidc'
+    ALL = 'rlidca'
     NONE = ''
 
 # special groups defined in fixtures/initial_data.json
@@ -227,7 +228,7 @@ class Folder(models.Model):
             raise TypeError('expected User, Group, or str')
 
     def setPermissionsAssertAllowed(self, requestingUser, agent, actions):
-        self.assertAllowed(requestingUser, Action.MANAGE)
+        self.assertAllowed(requestingUser, Action.ADMIN)
         self.setPermissions(agent, actions)
 
     def clearAcl(self):
@@ -257,7 +258,7 @@ class Folder(models.Model):
         return subFolder
 
     def makeSubFolderAssertAllowed(self, requestingUser, name):
-        self.assertAllowed(requestingUser, Action.ADD)
+        self.assertAllowed(requestingUser, Action.INSERT)
         return self.makeSubFolder(name, admin=requestingUser)
 
     def removeSubFolder(self, name):
@@ -322,12 +323,12 @@ class Folder(models.Model):
 
 class AgentPermission(models.Model):
     folder = models.ForeignKey(Folder, db_index=True)
-    canView = models.BooleanField(db_index=True)
+    canRead = models.BooleanField(db_index=True)
     canList = models.BooleanField(db_index=True)
-    canAdd = models.BooleanField(db_index=True)
+    canInsert = models.BooleanField(db_index=True)
     canDelete = models.BooleanField(db_index=True)
     canChange = models.BooleanField(db_index=True)
-    canManage = models.BooleanField(db_index=True)
+    canAdmin = models.BooleanField(db_index=True)
 
     class Meta:
         abstract = True
@@ -373,64 +374,107 @@ class GroupPermission(AgentPermission):
                  self.getActions()))
 
 class PermissionManager(object):
-    @staticmethod
-    def isAllowed(obj, user, action):
+    @classmethod
+    def isAllowedByAnyFolder(cls, folders, user, action):
+        return reduce(operator.or_, [folder.isAllowed(user, action) for folder in folders])
+
+    @classmethod
+    def assertAllowedByAnyFolder(cls, folders, user, action):
+        allowed = cls.isAllowedByAnyFolder(folders, user, action)
+        if not allowed:
+            if user is None:
+                userName = '<anonymous>'
+            else:
+                userName = user.username
+            raise PermissionDenied('user %s does not have %s permission for any folder in %s'
+                                   % (userName, ACTION_LOOKUP[action], folders))
+
+    @classmethod
+    def isAllowed(cls, obj, user, action):
         if isinstance(obj, Folder):
             return obj.isAllowed(user, action)
-        elif hasattr(obj, 'folder'):
-            return obj.folder.isAllowed(user, action)
+        elif hasattr(obj, 'folders'):
+            return cls.isAllowedByAnyFolder(obj.folders.all(), user, action)
         else:
-            raise TypeError('expected a Folder or a model with a folder field')
+            raise TypeError('expected a Folder or a model with a folders field')
 
-    @staticmethod
-    def assertAllowed(obj, user, action):
+    @classmethod
+    def assertAllowed(cls, obj, user, action):
         if isinstance(obj, Folder):
             obj.assertAllowed(user, action)
-        elif hasattr(obj, 'folder'):
-            obj.folder.assertAllowed(user, action)
+        elif hasattr(obj, 'folders'):
+            cls.assertAllowedByAnyFolder(obj.folders.all(), user, action)
         else:
-            raise TypeError('expected a Folder or a model with a folder field')
+            raise TypeError('expected a Folder or a model with a folders field')
 
-    @staticmethod
-    def filterAllowed(querySet, requestingUser, action=Action.VIEW):
+    @classmethod
+    def filterAllowed(cls, querySet, requestingUser, action=Action.READ):
         if (not settings.GEOCAM_FOLDER_ACCESS_CONTROL_ENABLED
             or ((requestingUser is not None) and requestingUser.is_superuser)):
             return querySet
         else:
             allowedFolderIds = getAllowedFolders(requestingUser, action).iterkeys()
-            return querySet.filter(folder__id__in=allowedFolderIds)
+            return querySet.filter(folders__in=allowedFolderIds)
 
     @classmethod
-    def saveAssertAllowed(cls, obj, requestingUser, *args, **kwargs):
+    def saveAssertAllowed(cls, obj, requestingUser, checkFolders=None, *args, **kwargs):
         if obj.pk is not None:
             cls.assertAllowed(obj, requestingUser, Action.CHANGE)
         else:
-            cls.assertAllowed(obj, requestingUser, Action.ADD)
+            assert checkFolders is not None, "saveAssertAllowed can't check if it's ok to save a new object unless checkFolders is specified"
+            cls.assertFolderChangeAllowed(requestingUser, [], checkFolders)
         obj.save(*args, **kwargs)
 
     @classmethod
+    def assertFolderChangeAllowed(cls, requestingUser, oldFolders, newFolders):
+        # For objects already in the database, check that user has admin
+        # permissions on the object (i.e. admin permissions on at least
+        # one folder the object is already in). If not, the requesting
+        # user could elevate another user's permissions by adding the
+        # object to a new folder where they have more permissions. If
+        # the object is not already in any folders that means this user
+        # is creating it, so they have "initial" admin privileges until
+        # the object's folders have been set.
+        if oldFolders:
+           cls.assertAllowedByAnyFolder(oldFolders, requestingUser, Action.ADMIN)
+
+        # check that user has insert permissions for all folders the object is
+        # being added to
+        oldFolderDict = dict.fromkeys([f.id for f in oldFolders])
+        for f in newFolders:
+            if f.id not in oldFolderDict:
+                f.assertAllowed(requestingUser, Action.INSERT)
+
+        # check that user has delete permissions for all folders the object is
+        # being removed from
+        newFolderDict = dict.fromkeys([f.id for f in newFolders])
+        for f in oldFolders:
+            if f.id not in newFolderDict:
+                f.assertAllowed(requestingUser, Action.DELETE)
+
+    @classmethod
     def deleteAssertAllowed(cls, obj, requestingUser, *args, **kwargs):
-        cls.assertAllowed(obj, requestingUser, Action.DELETE)
+        cls.assertFolderChangeAllowed(requestingUser, obj.folders.all(), [])
         obj.delete(*args, **kwargs)
 
 class FolderMember(object):
     """
-    This mixin class is intended for objects that are 'contained' in a
-    folder and subject to its access controls.
+    This mixin class is intended for objects that are 'contained' in
+    folders and subject to their access controls.
 
     It imports functions from PermissionManager for convenience.  You
     don't need to use this mixin if you prefer to call the
     PermissionManager functions directly.
     """
 
-    def isAllowed(self, user, action):
-        return self.folder.isAllowed(user, action)
+    def isAllowed(self, requestingUser, action):
+        return PermissionManager.isAllowed(self, requestingUser, action)
 
-    def assertAllowed(self, user, action):
-        self.folder.assertAllowed(user, action)
+    def assertAllowed(self, requestingUser, action):
+        PermissionManager.assertAllowed(self, requestingUser, action)
 
     @classmethod
-    def allowed(cls, requestingUser, action=Action.VIEW):
+    def allowed(cls, requestingUser, action=Action.READ):
         return PermissionManager.filterAllowed(cls.objects, requestingUser, action)
 
     def saveAssertAllowed(self, requestingUser, *args, **kwargs):
@@ -444,7 +488,7 @@ class FolderMemberExample(models.Model, FolderMember):
     This model exists only to support testing the FolderMember mixin.
     """
     name = models.CharField(max_length=32)
-    folder = models.ForeignKey(Folder, db_index=True)
+    folders = models.ManyToManyField(Folder, db_index=True)
 
 class FolderAwarePosition(models.Model, FolderMember):
     """
@@ -454,7 +498,7 @@ class FolderAwarePosition(models.Model, FolderMember):
     """
     x = models.FloatField()
     y = models.FloatField()
-    folder = models.ForeignKey(Folder, db_index=True)
+    folders = models.ManyToManyField(Folder, db_index=True)
 
     def __unicode__(self):
         return 'x=%s y=%s' % (self.x, self.y)

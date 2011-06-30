@@ -30,7 +30,7 @@
         "pk": null,
         "fields": {
             "folder": 1,
-            "canView": true,
+            "canRead": true,
             "canList": true,
             "group": 1
         }

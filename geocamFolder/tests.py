@@ -41,7 +41,13 @@ class FolderTest(TestCase):
         folder = root.makeSubFolder('%s_%s' % (prefix, actionsName))
         folder.clearAcl()
         folder.setPermissions(agent, actions)
-        Member(name='foo', folder=folder).save() # to test reading
+
+        # insert an object to the folder so we can test read access
+        m = Member(name='foo')
+        m.save()
+        m.folders = [folder]
+        m.save()
+
         return folder
 
     def setUp(self):
@@ -68,20 +74,32 @@ class FolderTest(TestCase):
         for level in levels:
             self.authuserDir[level] = self.makeFolderWithPerms('group:authuser', level)
 
-    def test_addObject(self):
+    def test_insertObject(self):
         # admin, alice and bob have write privileges
-        Member(name='byAdmin', folder=self.f1).saveAssertAllowed(self.admin)
-        self.assert_(Member.objects.filter(name='byAdmin', folder=self.f1).exists())
+        m = Member(name='byAdmin')
+        m.saveAssertAllowed(self.admin, checkFolders=[self.f1])
+        m.folders = [self.f1]
+        m.save()
+        self.assert_(Member.objects.filter(name='byAdmin', folders=self.f1).exists())
         
-        Member(name='byAlice', folder=self.f1).saveAssertAllowed(self.alice)
-        self.assert_(Member.objects.filter(name='byAlice', folder=self.f1).exists())
+        m = Member(name='byAlice')
+        m.saveAssertAllowed(self.alice, checkFolders=[self.f1])
+        m.folders = [self.f1]
+        m.save()
+        self.assert_(Member.objects.filter(name='byAlice', folders=self.f1).exists())
 
-        Member(name='byBob', folder=self.f1).saveAssertAllowed(self.bob)
-        self.assert_(Member.objects.filter(name='byBob', folder=self.f1).exists())
+        m = Member(name='byBob')
+        m.saveAssertAllowed(self.bob, checkFolders=[self.f1])
+        m.folders = [self.f1]
+        m.save()
+        self.assert_(Member.objects.filter(name='byBob', folders=self.f1).exists())
 
         # clara only has read privileges, denied
         def byClara():
-            Member(name='byClara', folder=self.f1).saveAssertAllowed(self.clara)
+            m = Member(name='byClara')
+            m.saveAssertAllowed(self.clara, checkFolders=[self.f1])
+            m.folders = [self.f1]
+            m.save()
         self.assertRaises(PermissionDenied, byClara)
 
     def test_mkdir(self):
@@ -103,10 +121,13 @@ class FolderTest(TestCase):
             Folder.mkdirAssertAllowed(self.clara, '/f1/byClara')
         self.assertRaises(PermissionDenied, byClara)
 
-    def test_viewObject(self):
-        Member(name='x', folder=self.f1).save()
+    def test_readObject(self):
+        m = Member(name='x')
+        m.save()
+        m.folders = [self.f1]
+        m.save()
         def containsX(querySet):
-            return querySet.filter(name='x', folder=self.f1).exists()
+            return querySet.filter(name='x', folders=self.f1).exists()
         
         # admin, alice, bob, and clara have read privileges
         self.assert_(containsX(Member.allowed(self.admin)))
@@ -120,23 +141,29 @@ class FolderTest(TestCase):
     def doTestFor(self, dirDict, requestingUser):
         # changing acl should work on 'all' but not on 'write'
         dirDict['all'].setPermissionsAssertAllowed(requestingUser, self.alice, Actions.READ)
-        self.assert_(dirDict['all'].isAllowed(self.alice, Action.VIEW))
+        self.assert_(dirDict['all'].isAllowed(self.alice, Action.READ))
 
         def changeAclWrite():
             dirDict['write'].setPermissionsAssertAllowed(requestingUser, self.alice, Actions.READ)
         self.assertRaises(PermissionDenied, changeAclWrite)
 
-        # adding an object should work on 'write' but not on 'read'
-        Member(name='writeGood', folder=dirDict['write']).saveAssertAllowed(requestingUser)
-        self.assert_(Member.objects.filter(name='writeGood', folder=dirDict['write']).exists())
+        # inserting an object should work on 'write' but not on 'read'
+        m = Member(name='writeGood')
+        m.saveAssertAllowed(requestingUser, checkFolders=[dirDict['write']])
+        m.folders = [dirDict['write']]
+        m.save()
+        self.assert_(Member.objects.filter(name='writeGood', folders=dirDict['write']).exists())
         
-        def addObjectRead():
-            Member(name='writeBad', folder=dirDict['read']).saveAssertAllowed(requestingUser)
-        self.assertRaises(PermissionDenied, addObjectRead)
+        def insertObjectRead():
+            m = Member(name='writeBad')
+            m.saveAssertAllowed(requestingUser, checkFolders=[dirDict['read']])
+            m.folders = [dirDict['read']]
+            m.save()
+        self.assertRaises(PermissionDenied, insertObjectRead)
 
-        # viewing an object should work on 'read' but not on 'none'
-        self.assert_(Member.allowed(requestingUser).filter(folder=dirDict['read']).exists())
-        self.assertFalse(Member.allowed(requestingUser).filter(folder=dirDict['none']).exists())
+        # reading an object should work on 'read' but not on 'none'
+        self.assert_(Member.allowed(requestingUser).filter(folders=dirDict['read']).exists())
+        self.assertFalse(Member.allowed(requestingUser).filter(folders=dirDict['none']).exists())
 
     def test_anyuser(self):
         self.doTestFor(self.anyuserDir, None)
