@@ -37,6 +37,7 @@ class Action(object):
     CHANGE = 'c'
     ADMIN = 'a'
 
+
 # handy abbreviations for action combinations
 class Actions(object):
     READ = 'rl'
