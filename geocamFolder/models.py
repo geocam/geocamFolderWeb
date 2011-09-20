@@ -19,22 +19,23 @@ from geocamUtil.models.ExtrasField import ExtrasField
 from geocamFolder import settings
 
 ACTION_CHOICES = (
-    'read', # read members
-    'list', # list subfolders
-    'insert', # insert members
-    'delete', # delete members
-    'change', # change existing members
-    'admin', # change access control list
+    'read',  # read members
+    'list',  # list subfolders
+    'insert',  # insert members
+    'delete',  # delete members
+    'change',  # change existing members
+    'admin',  # change access control list
     )
 ACTION_LOOKUP = dict([name[0], name] for name in ACTION_CHOICES)
 
-class Action(object):
-    pass
 
-# define constants drawn from ACTION_CHOICES
-# example: Actions.READ = 'r' from the entry 'read'
-for name in ACTION_CHOICES:
-    setattr(Action, name.upper(), name[0])
+class Action(object):
+    READ = 'r'
+    LIST = 'l'
+    INSERT = 'i'
+    DELETE = 'd'
+    CHANGE = 'c'
+    ADMIN = 'a'
 
 # handy abbreviations for action combinations
 class Actions(object):
@@ -49,9 +50,11 @@ GROUP_AUTHUSER_ID = 2
 
 FOLDER_CACHE_VERSION = 1
 
+
 def getCacheKey(resultFunc, args):
     prefix = '%s.%s.%s.' % (FOLDER_CACHE_VERSION, resultFunc.__module__, resultFunc.__name__)
     return urlquote(prefix + '.'.join([repr(arg) for arg in args]))
+
 
 def getWithCache(resultFunc, args, timeout):
     """
@@ -67,14 +70,17 @@ def getWithCache(resultFunc, args, timeout):
     else:
         return resultFunc(*args)
 
+
 def flushCache():
     global FOLDER_CACHE_VERSION
     FOLDER_CACHE_VERSION += 1
+
 
 def _addGroupAllowedFolders(allowed, groupId, action):
     perms = GroupPermission.allowing(action).filter(group__id=groupId).only('folder')
     for p in perms:
         allowed[p.folder.id] = p.folder
+
 
 def _getAllowedFoldersNoCache(user, action):
     """
@@ -86,7 +92,7 @@ def _getAllowedFoldersNoCache(user, action):
 
     if user is not None and user.is_active:
         _addGroupAllowedFolders(allowed, GROUP_AUTHUSER_ID, action)
-        
+
         userPerms = UserPermission.allowing(action).filter(user=user).only('folder')
         for p in userPerms:
             allowed[p.folder.id] = p.folder
@@ -97,6 +103,7 @@ def _getAllowedFoldersNoCache(user, action):
 
     return allowed
 
+
 def getAllowedFolders(user, action):
     """
     Return folders for which @user has permission to perform @action.
@@ -104,6 +111,7 @@ def getAllowedFolders(user, action):
     """
     return getWithCache(_getAllowedFoldersNoCache, (user, action),
                         settings.GEOCAM_FOLDER_FOLDER_CACHE_TIMEOUT_SECONDS)
+
 
 class FolderTree(object):
     """
@@ -116,6 +124,7 @@ class FolderTree(object):
     def __init__(self, root, byId):
         self.root = root
         self.byId = byId
+
 
 def _getFolderTreeNoCache():
     """
@@ -137,7 +146,8 @@ def _getFolderTreeNoCache():
             current.subFolders[subFolder.name] = subFolder
             queue.append(subFolder)
     return tree
-    
+
+
 def getFolderTree():
     """
     Returns a tree data structure for all folders in the system.  See
@@ -146,12 +156,14 @@ def getFolderTree():
     return getWithCache(_getFolderTreeNoCache, (),
                         settings.GEOCAM_FOLDER_FOLDER_CACHE_TIMEOUT_SECONDS)
 
+
 def getAgentByName(agentString):
     if agentString.startswith('group:'):
         groupName = agentString[len('group:'):]
         return Group.objects.get(name=groupName)
     else:
         return User.objects.get(username=agentString)
+
 
 class Folder(models.Model):
     name = models.CharField(max_length=32, db_index=True)
@@ -194,7 +206,7 @@ class Folder(models.Model):
         acl.sort()
         out = StringIO()
         for agentName, actions in acl:
-            print >>out, '  %s %s' % (agentName, actions)
+            print >> out, '  %s %s' % (agentName, actions)
         return out.getvalue()
 
     def assertAllowed(self, user, action):
@@ -214,14 +226,14 @@ class Folder(models.Model):
             if actions == '':
                 UserPermission.objects.filter(user=agent, folder=self).delete()
             else:
-                perm, created = UserPermission.objects.get_or_create(user=agent, folder=self)
+                perm, _created = UserPermission.objects.get_or_create(user=agent, folder=self)
                 perm.setActions(actions)
                 perm.save()
         elif isinstance(agent, Group):
             if actions == '':
                 GroupPermission.objects.filter(group=agent, folder=self).delete()
             else:
-                perm, created = GroupPermission.objects.get_or_create(group=agent, folder=self)
+                perm, _created = GroupPermission.objects.get_or_create(group=agent, folder=self)
                 perm.setActions(actions)
                 perm.save()
         else:
@@ -254,7 +266,7 @@ class Folder(models.Model):
         subFolder.copyAcl(self)
         if admin:
             subFolder.setPermissions(admin, Actions.ALL)
-        
+
         return subFolder
 
     def makeSubFolderAssertAllowed(self, requestingUser, name):
@@ -276,7 +288,7 @@ class Folder(models.Model):
     def getFolder(cls, path, workingFolder='/', requestingUser=None):
         tree = getFolderTree()
         absPath = os.path.normpath(os.path.join(workingFolder, path))
-        absPath = absPath[1:] # strip leading '/'
+        absPath = absPath[1:]  # strip leading '/'
         if absPath != '':
             elts = absPath.split('/')
         else:
@@ -321,6 +333,7 @@ class Folder(models.Model):
         parent = cls.getFolderAssertAllowed(requestingUser, dirname, workingFolder)
         return parent.removeSubFolderAssertAllowed(requestingUser, basename)
 
+
 class AgentPermission(models.Model):
     folder = models.ForeignKey(Folder, db_index=True)
     canRead = models.BooleanField(db_index=True)
@@ -355,6 +368,7 @@ class AgentPermission(models.Model):
                 text.append(action)
         return ''.join(text)
 
+
 class UserPermission(AgentPermission):
     user = models.ForeignKey(User, db_index=True)
 
@@ -364,6 +378,7 @@ class UserPermission(AgentPermission):
                  self.user.username,
                  self.getActions()))
 
+
 class GroupPermission(AgentPermission):
     group = models.ForeignKey(Group, db_index=True)
 
@@ -372,6 +387,7 @@ class GroupPermission(AgentPermission):
                 (self.folder.name,
                  self.group.name,
                  self.getActions()))
+
 
 class PermissionManager(object):
     @classmethod
@@ -436,7 +452,7 @@ class PermissionManager(object):
         # is creating it, so they have "initial" admin privileges until
         # the object's folders have been set.
         if oldFolders:
-           cls.assertAllowedByAnyFolder(oldFolders, requestingUser, Action.ADMIN)
+            cls.assertAllowedByAnyFolder(oldFolders, requestingUser, Action.ADMIN)
 
         # check that user has insert permissions for all folders the object is
         # being added to
@@ -456,6 +472,7 @@ class PermissionManager(object):
     def deleteAssertAllowed(cls, obj, requestingUser, *args, **kwargs):
         cls.assertFolderChangeAllowed(requestingUser, obj.folders.all(), [])
         obj.delete(*args, **kwargs)
+
 
 class FolderMember(object):
     """
@@ -483,12 +500,14 @@ class FolderMember(object):
     def deleteAssertAllowed(self, requestingUser, *args, **kwargs):
         PermissionManager.deleteAssertAllowed(self, requestingUser, *args, **kwargs)
 
+
 class FolderMemberExample(models.Model, FolderMember):
     """
     This model exists only to support testing the FolderMember mixin.
     """
     name = models.CharField(max_length=32)
     folders = models.ManyToManyField(Folder, db_index=True)
+
 
 class FolderAwarePosition(models.Model, FolderMember):
     """

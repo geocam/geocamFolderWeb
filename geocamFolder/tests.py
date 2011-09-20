@@ -14,7 +14,12 @@ from django.core.exceptions import PermissionDenied
 from geocamFolder.models import getCacheKey, getWithCache, Folder, Action, Actions
 from geocamFolder.models import FolderMemberExample as Member
 
+
 class CacheTest(TestCase):
+    def __init__(self, *args, **kwargs):
+        super(CacheTest, self).__init__(*args, **kwargs)
+        self.x = None
+
     def test_getCacheKey(self):
         def func(*args):
             return
@@ -32,6 +37,7 @@ class CacheTest(TestCase):
         self.assertEquals(0, getWithCache(getX, (), timeout=0.01))
         time.sleep(0.01)
         self.assertEquals(1, getWithCache(getX, (), timeout=0.01))
+
 
 class FolderTest(TestCase):
     def makeFolderWithPerms(self, agent, actionsName):
@@ -81,7 +87,7 @@ class FolderTest(TestCase):
         m.folders = [self.f1]
         m.save()
         self.assert_(Member.objects.filter(name='byAdmin', folders=self.f1).exists())
-        
+
         m = Member(name='byAlice')
         m.saveAssertAllowed(self.alice, checkFolders=[self.f1])
         m.folders = [self.f1]
@@ -115,7 +121,7 @@ class FolderTest(TestCase):
 
         Folder.mkdirAssertAllowed(self.bob, '/f1/byBob')
         Folder.getFolderAssertAllowed(self.bob, '/f1/byBob')
-        
+
         # clara has only read privileges, denied
         def byClara():
             Folder.mkdirAssertAllowed(self.clara, '/f1/byClara')
@@ -126,9 +132,10 @@ class FolderTest(TestCase):
         m.save()
         m.folders = [self.f1]
         m.save()
+
         def containsX(querySet):
             return querySet.filter(name='x', folders=self.f1).exists()
-        
+
         # admin, alice, bob, and clara have read privileges
         self.assert_(containsX(Member.allowed(self.admin)))
         self.assert_(containsX(Member.allowed(self.alice)))
@@ -153,7 +160,7 @@ class FolderTest(TestCase):
         m.folders = [dirDict['write']]
         m.save()
         self.assert_(Member.objects.filter(name='writeGood', folders=dirDict['write']).exists())
-        
+
         def insertObjectRead():
             m = Member(name='writeBad')
             m.saveAssertAllowed(requestingUser, checkFolders=[dirDict['read']])

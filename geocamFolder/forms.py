@@ -4,4 +4,3 @@
 # All Rights Reserved.
 # __END_LICENSE__
 
-from django import forms
