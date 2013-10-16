@@ -6,6 +6,8 @@
 
 from django.conf.urls import patterns, url
 
-urlpatterns = patterns('',
+urlpatterns = patterns(
+    '',
+
     url(r'^$', 'views.index', name='index'),
 )

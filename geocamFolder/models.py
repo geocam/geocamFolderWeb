@@ -18,6 +18,8 @@ from geocamUtil.models.UuidField import UuidField
 from geocamUtil.models.ExtrasField import ExtrasField
 from geocamFolder import settings
 
+# pylint: disable=C1001,E1101
+
 ACTION_CHOICES = (
     'read',  # read members
     'list',  # list subfolders
@@ -25,7 +27,7 @@ ACTION_CHOICES = (
     'delete',  # delete members
     'change',  # change existing members
     'admin',  # change access control list
-    )
+)
 ACTION_LOOKUP = dict([name[0], name] for name in ACTION_CHOICES)
 
 
@@ -426,8 +428,8 @@ class PermissionManager(object):
 
     @classmethod
     def filterAllowed(cls, querySet, requestingUser, action=Action.READ):
-        if (not settings.GEOCAM_FOLDER_ACCESS_CONTROL_ENABLED
-            or ((requestingUser is not None) and requestingUser.is_superuser)):
+        if (not settings.GEOCAM_FOLDER_ACCESS_CONTROL_ENABLED or
+                ((requestingUser is not None) and requestingUser.is_superuser)):
             return querySet
         else:
             allowedFolderIds = getAllowedFolders(requestingUser, action).iterkeys()

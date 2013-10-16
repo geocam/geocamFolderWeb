@@ -5,6 +5,8 @@
 # All Rights Reserved.
 # __END_LICENSE__
 
+# pylint: disable=W0622
+
 #
 # app documentation build configuration file, created by
 # sphinx-quickstart on Wed Oct 21 13:18:22 2009.
@@ -181,8 +183,8 @@ htmlhelp_basename = 'geocamFolderWebdoc'
 # Grouping the document tree into LaTeX files. List of tuples
 # (source start file, target name, title, author, documentclass [howto/manual]).
 latex_documents = [
-  ('index', 'app.tex', u'geocamFolderWeb Documentation',
-   u'Trey Smith', 'manual'),
+    ('index', 'app.tex', u'geocamFolderWeb Documentation',
+     u'Trey Smith', 'manual'),
 ]
 
 # The name of an image file (relative to this directory) to place at the top of

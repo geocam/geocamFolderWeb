@@ -43,7 +43,7 @@ class FolderTest(TestCase):
     def makeFolderWithPerms(self, agent, actionsName):
         root = Folder.getRootFolder()
         actions = getattr(Actions, actionsName.upper())
-        prefix = re.sub('^\w+:', '', agent)
+        prefix = re.sub(r'^\w+:', '', agent)
         folder = root.makeSubFolder('%s_%s' % (prefix, actionsName))
         folder.clearAcl()
         folder.setPermissions(agent, actions)
