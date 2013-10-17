@@ -5,14 +5,15 @@
 # __END_LICENSE__
 
 import re
-import time
+# import time
 
 from django.test import TestCase
 from django.contrib.auth.models import User
 from django.core.exceptions import PermissionDenied
 
-from geocamFolder.models import getCacheKey, getWithCache, Folder, Action, Actions
+from geocamFolder.models import getCacheKey, Folder, Action, Actions
 from geocamFolder.models import FolderMemberExample as Member
+# from geocamFolder.models import getWithCache
 
 
 class CacheTest(TestCase):
