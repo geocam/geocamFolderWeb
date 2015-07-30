@@ -339,12 +339,12 @@ class Folder(models.Model):
 
 class AgentPermission(models.Model):
     folder = models.ForeignKey(Folder, db_index=True)
-    canRead = models.BooleanField(db_index=True)
-    canList = models.BooleanField(db_index=True)
-    canInsert = models.BooleanField(db_index=True)
-    canDelete = models.BooleanField(db_index=True)
-    canChange = models.BooleanField(db_index=True)
-    canAdmin = models.BooleanField(db_index=True)
+    canRead = models.BooleanField(db_index=True, default=True)
+    canList = models.BooleanField(db_index=True, default=True)
+    canInsert = models.BooleanField(db_index=True, default=False)
+    canDelete = models.BooleanField(db_index=True, default=False)
+    canChange = models.BooleanField(db_index=True, default=False)
+    canAdmin = models.BooleanField(db_index=True, default=False)
 
     class Meta:
         abstract = True
