@@ -16,7 +16,7 @@ from django.utils.http import urlquote
 
 from geocamUtil.models.UuidField import UuidField
 from geocamUtil.models.ExtrasField import ExtrasField
-from geocamFolder import settings
+from django.conf import settings
 
 # pylint: disable=C1001,E1101
 
