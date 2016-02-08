@@ -15,7 +15,7 @@ from django.core.exceptions import PermissionDenied, ObjectDoesNotExist
 from django.utils.http import urlquote
 
 from geocamUtil.models.UuidField import UuidField
-from geocamUtil.models.ExtrasField import ExtrasField
+from geocamUtil.models.ExtrasDotField import ExtrasDotField
 from django.conf import settings
 
 # pylint: disable=C1001,E1101
@@ -173,7 +173,7 @@ class Folder(models.Model):
     parent = models.ForeignKey('self', null=True, db_index=True)
     notes = models.TextField(blank=True)
     uuid = UuidField(db_index=True)
-    extras = ExtrasField()
+    extras = ExtrasDotField()
 
     class Meta:
         app_label = 'geocamFolder'
